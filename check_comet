@@ -1,0 +1,90 @@
+#!/bin/bash
+#
+# 26.01.2023: check https return of comet sensor
+#
+##########################################################
+
+PROGNAME=`basename $0`
+
+help() {
+cat << END
+Usage :
+        $PROGNAME -u [STRING] -r [STRING]
+
+        OPTION          DESCRIPTION
+        ----------------------------------
+        -h              Help
+        -u [STRING]     URL
+        -s [STRING]     Sensor-Type (e.g. Temperature)
+	-n [INTEGER]	Lower Warn
+	-m [INTEGER]	Higher Warn
+	-x [INTEGER]	Lower Crit
+	-c [INTEGER]	Higher Crit
+        -v              Verbose
+        ----------------------------------
+END
+}
+
+if [ $# -lt 12 ]
+then
+        help;
+        exit 3;
+fi
+
+while getopts "hu:s:n:m:x:c:v" OPT
+do
+        case $OPT in
+        h) help ;;
+        u) url="$OPTARG" ;;
+        s) sen="$OPTARG" ;;
+	n) lw="$OPTARG" ;;
+	m) hw="$OPTARG" ;;
+	x) lc="$OPTARG" ;;
+        c) hc="$OPTARG" ;;
+        v) ver=true ;;
+        *) help ;;
+        esac
+done
+
+echo"w/c $lw / $hw / $lc / $hc"
+
+ret=`curl -s $url` 
+line=$( echo "$ret" | grep "$sen" )
+value=$( echo "$line" | grep -Po "\\d+.\\d+" )
+
+if [[ $ver == true ]]; then
+echo "URL: $url"
+echo "Sensor: $sen"
+echo "Return: $ret"
+echo "Line: $line"
+echo "Value: $value"
+fi
+
+if [ -z "$ret" ]; then
+    echo "UNKNOWN: no return from $url"
+    exit 3
+fi
+
+if [ -z $value ]; then
+    echo "UNKNOWN: no value found for $sen"
+    exit 3
+fi
+
+if (( $(echo "$value < $lc" | bc -l) )) ; then
+    echo "CRITICAL: Low $sen: $value"
+    echo "$value < $lc"
+    exit 2
+elif (( $(echo "$value > $hc" | bc -l) )); then
+    echo "CRITICAL: High $sen: $value"
+    echo "$value > $hc"
+    exit 2
+elif (( $(echo "$value < $lw" | bc -l) )); then
+    echo "WARNING: Low $sen: $value"
+    exit 1
+elif (( $(echo "$value > $hw" | bc -l) )); then
+    echo "WARNING: High $sen: $value"
+    exit 1
+else
+    echo "OK: $sen is $value"
+    exit 0
+fi
