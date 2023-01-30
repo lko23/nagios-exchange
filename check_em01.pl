@@ -5,6 +5,7 @@
 #$Id: check_em01.c,v 1.5 2005/08/11 23:40:30 Esensors, Inc Exp $
 
 # v 1.6 Added support for performance data. 20/01/2010 AndrÃ© Bergei
+# 30.01.2023: Change Performance Data Output
 
 # configure nagios utils
 use lib "/usr/lib64/nagios/plugins/";
@@ -46,6 +47,7 @@ my @temp = split(/[\/,]/, $opt_temp);
 my @hum = split(/[\/,]/, $opt_hum);
 my @illum = split(/[\/,]/, $opt_illum);
 
+my ($twarnlow, $twarnhigh, $tcritlow, $tcrithigh) = @temp;
 my ($hwarnlow, $hwarnhigh, $hcritlow, $hcrithigh) = @hum;
 
 my $vals = &read_sensor($sensor, $opt_timeout);
@@ -73,9 +75,9 @@ if ($opt_typ eq '') {
 } else {
 #	print "[";
 	if ($opt_typ eq "temp") {
-		print "Temp: $vals->{'temperature'} $vals->{'temp-unit'} |$vals->{'temp-unit'}=$vals->{'temperature'}\n";
+                print "Temp: $vals->{'temperature'} $vals->{'temp-unit'} |Temperature=$vals->{'temperature'}$vals->{'temp-unit'};$twarnlow:$twarnhigh;$tcritlow:$tcrithigh\n";
 	} elsif ($opt_typ eq "hum") {
-		print "Humidity: $vals->{'humidity'}% |Humidity=$vals->{'humidity'}%;$hwarnlow:$hwarnhigh;$hcritlow:$hcrithigh;0;100\n";
+		print "Humidity: $vals->{'humidity'} % |Humidity=$vals->{'humidity'}%;$hwarnlow:$hwarnhigh;$hcritlow:$hcrithigh;0;100\n";
 	} elsif ($opt_typ eq "illum") {
 		print "Illum: $vals->{'illumination'} |Illum=$vals->{'illumination'}\n";
 	}
