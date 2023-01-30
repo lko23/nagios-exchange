@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # 26.01.2023: check https return of comet sensor
+# 30.01.2023: Add performance data
 #
 ##########################################################
 
@@ -31,28 +32,29 @@ then
         exit 3;
 fi
 
-while getopts "hu:s:n:m:x:c:v" OPT
+while getopts "hu:H:s:n:m:x:c:v" OPT
 do
         case $OPT in
         h) help ;;
+        H) host="$OPTARG" ;;
         u) url="$OPTARG" ;;
         s) sen="$OPTARG" ;;
-	n) lw="$OPTARG" ;;
-	m) hw="$OPTARG" ;;
-	x) lc="$OPTARG" ;;
+        n) lw="$OPTARG" ;;
+        m) hw="$OPTARG" ;;
+        x) lc="$OPTARG" ;;
         c) hc="$OPTARG" ;;
         v) ver=true ;;
         *) help ;;
         esac
 done
 
-echo"w/c $lw / $hw / $lc / $hc"
-
-ret=`curl -s $url` 
+ret=`curl -s $host$url`
 line=$( echo "$ret" | grep "$sen" )
 value=$( echo "$line" | grep -Po "\\d+.\\d+" )
+unit=$( echo "$line" | grep -Po "(?<=&deg;)." )
 
 if [[ $ver == true ]]; then
+echo "Host: $host"
 echo "URL: $url"
 echo "Sensor: $sen"
 echo "Return: $ret"
@@ -61,7 +63,7 @@ echo "Value: $value"
 fi
 
 if [ -z "$ret" ]; then
-    echo "UNKNOWN: no return from $url"
+    echo "UNKNOWN: no return from $host$url"
     exit 3
 fi
 
@@ -71,20 +73,20 @@ if [ -z $value ]; then
 fi
 
 if (( $(echo "$value < $lc" | bc -l) )) ; then
-    echo "CRITICAL: Low $sen: $value"
+    echo "CRITICAL: Low $sen: $value $unit |$sen=$value$unit;$lw:$hw;$lc:$hc;"
     echo "$value < $lc"
     exit 2
 elif (( $(echo "$value > $hc" | bc -l) )); then
-    echo "CRITICAL: High $sen: $value"
+    echo "CRITICAL: High $sen: $value $unit |$sen=$value$unit;$lw:$hw;$lc:$hc;"
     echo "$value > $hc"
     exit 2
 elif (( $(echo "$value < $lw" | bc -l) )); then
-    echo "WARNING: Low $sen: $value"
+    echo "WARNING: Low $sen: $value $unit |$sen=$value$unit;$lw:$hw;$lc:$hc;"
     exit 1
 elif (( $(echo "$value > $hw" | bc -l) )); then
-    echo "WARNING: High $sen: $value"
+    echo "WARNING: High $sen: $value $unit |$sen=$value$unit;$lw:$hw;$lc:$hc;"
     exit 1
 else
-    echo "OK: $sen is $value"
+    echo "OK: $sen is $value $unit |$sen=$value$unit;$lw:$hw;$lc:$hc;"
     exit 0
 fi
