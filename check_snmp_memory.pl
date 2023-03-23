@@ -24,8 +24,11 @@
 #
 # - 03 Dec 2019 Version 1.3
 #   - added option for fixed memory reduction (-r) in MB;
-#   - use virtual memory instead of swap space
-#     
+#     use case: Windows SQL Servers reserving big percentage of total memory
+#     use goal: calculate percentages only for remaining memory (after deduction of SQL specific reservations)
+#
+# - 23 Mar 2023 Version 1.4
+#   - Slow SNMP Check for HOST-RESOURCES-MIB::hrStorageAllocationFailures OID, reduce to only needed OIDs
 
 use strict;
 use Getopt::Long;
@@ -43,6 +46,11 @@ my $os;                           # To store the operating system name
 my $cisco;                        # Cisco uses Linux - basically. But
                                   # there are some differences
 my $result;
+my $result3;
+my $result4;
+my $result5;
+my $result6;
+
 my ($session,$error);
 my $key;
 my $snmpversion;                  # SNMP version
@@ -266,15 +274,23 @@ $os =~ s/^.*Software://;
 $os =~ s/^\s+//;
 $os =~ s/ .*//;
 
+# Load only needed OIDs
+#$oids[2] = ".1.3.6.1.2.1.25.2.3.1";
+$oids[3] = ".1.3.6.1.2.1.25.2.3.1.3";
+$oids[4] = ".1.3.6.1.2.1.25.2.3.1.4";
+$oids[5] = ".1.3.6.1.2.1.25.2.3.1.5";
+$oids[6] = ".1.3.6.1.2.1.25.2.3.1.6";
 
-$oids[1] = ".1.3.6.1.2.1.25.2.3.1";
-$result = $session->get_table( -baseoid =>  $oids[1] );
+$result3 = $session->get_table( -baseoid =>  $oids[3] );
+$result4 = $session->get_table( -baseoid =>  $oids[4] );
+$result5 = $session->get_table( -baseoid =>  $oids[5] );
+$result6 = $session->get_table( -baseoid =>  $oids[6] );
 
 if ( ($os eq "Linux") || ($os eq "McAfee") )
    {
-   foreach $key ( keys %$result)
+   foreach $key ( keys %$result3)
           {
-          if ($$result{$key} =~ m/Memory Buffers/isog)
+          if ($$result3{$key} =~ m/Memory Buffers/isog)
              {
              if (!$cisco)
                 {
@@ -283,20 +299,20 @@ if ( ($os eq "Linux") || ($os eq "McAfee") )
                 }
              }
           # This is for net-snmp < 5.4
-          if ($$result{$key} =~ m/Real Memory/isog)
+          if ($$result3{$key} =~ m/Real Memory/isog)
              {
              $LxRealMemIdx = $key;
              $LxRealMemIdx =~ s/^.*\.//;
              }
           # This is for net-snmp >= 5.4
-          if ($$result{$key} =~ m/Physical memory/isog)
+          if ($$result3{$key} =~ m/Physical memory/isog)
              {
              $LxRealMemIdx = $key;
              $LxRealMemIdx =~ s/^.*\.//;
              }
-# use virtual memory instead of swap space, identical to Windows
-#           if ($$result{$key} =~ m/Swap Space/isog)
-           if ($$result{$key} =~ m/Virtual memory/isog)          
+# change from swap space to virtual memory
+#           if ($$result3{$key} =~ m/Swap Space/isog)
+           if ($$result3{$key} =~ m/Virtual memory/isog)          
 	     {
              $LxSwapIdx = $key;
              $LxSwapIdx =~ s/^.*\.//;
@@ -309,42 +325,42 @@ if ( ($os eq "Linux") || ($os eq "McAfee") )
    if (!$cisco)
       {
       $key = ".1.3.6.1.2.1.25.2.3.1.4.$LxMemBufIdx";
-      $LxMemoryAllocUnitsBuf = $$result{$key};
+      $LxMemoryAllocUnitsBuf = $$result4{$key};
 
       $key = ".1.3.6.1.2.1.25.2.3.1.5.$LxMemBufIdx";
-      $LxMemBufSize = $$result{$key} * $LxMemoryAllocUnitsBuf / 1024 / 1024;
+      $LxMemBufSize = $$result5{$key} * $LxMemoryAllocUnitsBuf / 1024 / 1024;
       }
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$LxSwapIdx";
-   $LxMemoryAllocUnitsSwap = $$result{$key};
+   $LxMemoryAllocUnitsSwap = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$LxSwapIdx";
 
-   if ( $$result{$key} == 0 )
+   if ( $$result5{$key} == 0 )
       {
       $LxSwapSize = 0;
       }
    else
       {
-      $LxSwapSize = $$result{$key} * $LxMemoryAllocUnitsSwap / 1024 / 1024;
+      $LxSwapSize = $$result5{$key} * $LxMemoryAllocUnitsSwap / 1024 / 1024;
       }
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$LxRealMemIdx";
-   $LxMemoryAllocUnitsReal = $$result{$key};
+   $LxMemoryAllocUnitsReal = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$LxRealMemIdx";
-   $LxRealMemSize = $$result{$key} * $LxMemoryAllocUnitsReal / 1024 / 1024;
+   $LxRealMemSize = $$result5{$key} * $LxMemoryAllocUnitsReal / 1024 / 1024;
 
    # Getting used memory
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$LxMemBufIdx";
-   $LxMemBufUsed = $$result{$key} * $LxMemoryAllocUnitsBuf / 1024 / 1024;
+   $LxMemBufUsed = $$result6{$key} * $LxMemoryAllocUnitsBuf / 1024 / 1024;
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$LxSwapIdx";
-   $LxSwapUsed = $$result{$key} * $LxMemoryAllocUnitsSwap / 1024 / 1024;
+   $LxSwapUsed = $$result6{$key} * $LxMemoryAllocUnitsSwap / 1024 / 1024;
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$LxRealMemIdx";
-   $LxRealMemUsed = $$result{$key} * $LxMemoryAllocUnitsReal / 1024 / 1024;
+   $LxRealMemUsed = $$result6{$key} * $LxMemoryAllocUnitsReal / 1024 / 1024;
 
    # Getting used percentage memory
 
@@ -396,7 +412,7 @@ if ( ($os eq "Linux") || ($os eq "McAfee") )
    $LxSwapSizeCrit = $LxSwapSize / 100 * $critical;
    $LxSwapSizeCrit = sprintf("%.0f",$LxSwapSizeCrit);
 
-#kopplu 16.03.2022: 'Memory Buffers: $LxMemBufUsedPercent% used ($LxMemBufUsedInt MB / $LxMemBufSize MB) - ' und  '\'Memory_Buffers\'=$LxMemBufUsed;;;0;$LxMemBufSize ' aus allen 3 Output entfernt. Output standardisiert.
+# 'Memory Buffers: $LxMemBufUsedPercent% used ($LxMemBufUsedInt MB / $LxMemBufSize MB) - ' und  '\'Memory_Buffers\'=$LxMemBufUsed;;;0;$LxMemBufSize ' aus allen 3 Output entfernt. Output standardisiert.
 
    if ( $LxSwapUsedPercent >= $warning  && $LxSwapUsedPercent <= $critical)
       {
@@ -449,21 +465,21 @@ if ( $os eq "SunOS" )
    {
    
    # Get the right index values
-   foreach $key ( keys %$result)
+   foreach $key ( keys %$result3)
           {
-          if ($$result{$key} =~ m/Physical memory/isog)
+          if ($$result3{$key} =~ m/Physical memory/isog)
              {
              $SolPhysicalMemoryIdx = $key;
              $SolPhysicalMemoryIdx =~ s/^.*\.//;
              }
-          if ($$result{$key} =~ m/Virtual memory/isog)
+          if ($$result3{$key} =~ m/Virtual memory/isog)
              {
              $SolVirtualMemoryIdx = $key;
              $SolVirtualMemoryIdx =~ s/^.*\.//;
              }
-# kopplu 11.7.22: change from swap space to virtual memory
-#          if ($$result{$key} =~ m/Swap space/isog)
-          if ($$result{$key} =~ m/Virtual memory/isog)
+# change from swap space to virtual memory
+#          if ($$result3{$key} =~ m/Swap space/isog)
+          if ($$result3{$key} =~ m/Virtual memory/isog)
              {
              $SolSwapspaceIdx = $key;
              $SolSwapspaceIdx =~ s/^.*\.//;
@@ -473,34 +489,34 @@ if ( $os eq "SunOS" )
    # Getting the size
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$SolSwapspaceIdx";
-   $SolMemoryAllocUnitsSwap = $$result{$key};
+   $SolMemoryAllocUnitsSwap = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$SolSwapspaceIdx";
-   $SolSwapSize = $$result{$key} * $SolMemoryAllocUnitsSwap / 1024 / 1024;
+   $SolSwapSize = $$result5{$key} * $SolMemoryAllocUnitsSwap / 1024 / 1024;
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$SolVirtualMemoryIdx";
-   $SolMemoryAllocUnitsVirt = $$result{$key};
+   $SolMemoryAllocUnitsVirt = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$SolVirtualMemoryIdx";
-   $SolVirtualMemorySize = $$result{$key} * $SolMemoryAllocUnitsVirt / 1024 / 1024;
+   $SolVirtualMemorySize = $$result5{$key} * $SolMemoryAllocUnitsVirt / 1024 / 1024;
    $SolVirtualMemorySize = sprintf("%.0f",$SolVirtualMemorySize);
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$SolPhysicalMemoryIdx";
-   $SolMemoryAllocUnitsPhys = $$result{$key};
+   $SolMemoryAllocUnitsPhys = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$SolPhysicalMemoryIdx";
-   $SolPhysicalMemorySize = $$result{$key} * $SolMemoryAllocUnitsPhys / 1024 / 1024;
+   $SolPhysicalMemorySize = $$result5{$key} * $SolMemoryAllocUnitsPhys / 1024 / 1024;
 
    # Getting used memory
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$SolSwapspaceIdx";
-   $SolSwapUsed = $$result{$key} * $SolMemoryAllocUnitsSwap / 1024 / 1024;
+   $SolSwapUsed = $$result6{$key} * $SolMemoryAllocUnitsSwap / 1024 / 1024;
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$SolVirtualMemoryIdx";
-   $SolVirtualMemoryUsed = $$result{$key} * $SolMemoryAllocUnitsVirt / 1024 / 1024;
+   $SolVirtualMemoryUsed = $$result6{$key} * $SolMemoryAllocUnitsVirt / 1024 / 1024;
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$SolPhysicalMemoryIdx";
-   $SolPhysicalMemoryUsed = $$result{$key} * $SolMemoryAllocUnitsPhys / 1024 / 1024;
+   $SolPhysicalMemoryUsed = $$result6{$key} * $SolMemoryAllocUnitsPhys / 1024 / 1024;
 
    # Getting used percentage memory
 
@@ -561,14 +577,14 @@ if ( $os eq "Windows" )
    {
 
    # Get the right index values
-   foreach $key ( keys %$result)
+   foreach $key ( keys %$result3)
           {
-          if ($$result{$key} =~ m/Virtual memory/isog)
+          if ($$result3{$key} =~ m/Virtual memory/isog)
              {
              $WinVirtualMemoryIdx = $key;
              $WinVirtualMemoryIdx =~ s/^.*\.//;
              }
-          if ($$result{$key} =~ m/Physical Memory/isog)
+          if ($$result3{$key} =~ m/Physical Memory/isog)
              {
              $WinPhysicalMemoryIdx = $key;
              $WinPhysicalMemoryIdx =~ s/^.*\.//;
@@ -578,29 +594,29 @@ if ( $os eq "Windows" )
    # Getting the size
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$WinVirtualMemoryIdx";
-   $WinMemoryAllocUnitsVirtual = $$result{$key};
+   $WinMemoryAllocUnitsVirtual = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$WinVirtualMemoryIdx";
-   #$WinVirtualMemorySize = $$result{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024;
-   $WinVirtualMemorySize = ($$result{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
+   #$WinVirtualMemorySize = $$result5{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024;
+   $WinVirtualMemorySize = ($$result5{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
 
    $key = ".1.3.6.1.2.1.25.2.3.1.4.$WinPhysicalMemoryIdx";
-   $WinMemoryAllocUnitsPhysical = $$result{$key};
+   $WinMemoryAllocUnitsPhysical = $$result4{$key};
    
    $key = ".1.3.6.1.2.1.25.2.3.1.5.$WinPhysicalMemoryIdx";
-   #$WinPhysicalMemorySize = $$result{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024;
-   $WinPhysicalMemorySize = ($$result{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
+   #$WinPhysicalMemorySize = $$result5{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024;
+   $WinPhysicalMemorySize = ($$result5{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
 
    # Getting used memory
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$WinVirtualMemoryIdx";
-   #$WinVirtualMemoryUsed = $$result{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024;
-   $WinVirtualMemoryUsed = ($$result{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
+   #$WinVirtualMemoryUsed = $$result6{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024;
+   $WinVirtualMemoryUsed = ($$result6{$key} * $WinMemoryAllocUnitsVirtual / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
 
 
    $key = ".1.3.6.1.2.1.25.2.3.1.6.$WinPhysicalMemoryIdx";
-   #$WinPhysicalMemoryUsed = $$result{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024;
-   $WinPhysicalMemoryUsed = ($$result{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
+   #$WinPhysicalMemoryUsed = $$result6{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024;
+   $WinPhysicalMemoryUsed = ($$result6{$key} * $WinMemoryAllocUnitsPhysical / 1024 / 1024) - $reservedmem; # to support -r, substraced application specific reservations (e.g. SQL)
 
    # Getting used percentage memory
 
