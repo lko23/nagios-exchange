@@ -10,6 +10,8 @@
 # configure nagios utils
 use lib "/usr/lib64/nagios/plugins/";
 use utils qw($TIMEOUT %ERRORS);
+# higher timeout
+$TIMEOUT = 55;
 
 use strict;
 use Getopt::Long;
@@ -50,7 +52,16 @@ my @illum = split(/[\/,]/, $opt_illum);
 my ($twarnlow, $twarnhigh, $tcritlow, $tcrithigh) = @temp;
 my ($hwarnlow, $hwarnhigh, $hcritlow, $hcrithigh) = @hum;
 
-my $vals = &read_sensor($sensor, $opt_timeout);
+my $vals = undef;
+my $retry = 0;
+
+# Retry until return value or timeout
+while(!$vals->{'temperature'} || !$vals->{'humidity'} || !$vals->{'illumination'}){
+$retry++;
+$vals = &read_sensor($sensor, $opt_timeout);
+};
+&debug("Vals: $vals\n");
+&debug("Retry: $retry\n");
 
 my @msgs = ();
 my $condition = $ERRORS{'OK'};
