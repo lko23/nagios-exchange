@@ -5,6 +5,7 @@
  
 use strict;
 use warnings;
+use lib '/usr/lib/icinga2/custom_plugins';
 use vars qw($VERSION $VERBOSE $PROGNAME $OID_BASE);
 use lib "/usr/local/nagios/libexec";
 use utils qw(%ERRORS $TIMEOUT &print_revision);		## - nagios helpers
@@ -39,7 +40,7 @@ my $devUnit	= q{};					## - allocation unit oid
 my $devSize	= q{};					## - size oid
 my $devUsed	= q{};					## - used oid
 my $perc	= 0;					## - device percent used
-my $free	= 0;					## - device free space
+my $used	= 0;					## - device used space
 my $size	= 0;					## - device size
 my %unit_t	= (					## - units table
   'KB'		=> 1 << 10,
@@ -314,9 +315,12 @@ if ($VERBOSE) {
 $unit_sz	= $unit_sz / $resp->{$devUnit};
 $perc		= int(($resp->{$devUsed} / $resp->{$devSize}) * 100);
 $size		= sprintf("%0.2f", $resp->{$devSize} / $unit_sz);
-$free		= sprintf("%0.2f",
-  ($resp->{$devSize} - $resp->{$devUsed}) / $unit_sz
-);
+$used		= sprintf("%0.2f", $resp->{$devUsed} / $unit_sz);
+# change to used instead of free
+# $free         = sprintf("%0.2f",
+#  ($resp->{$devSize} - $resp->{$devUsed}) / $unit_sz
+# );
+#
 
 if ($warn =~ /\%$/o || $crit =~ /\%$/o) {
   $warn		=~ s/%$//;
@@ -326,16 +330,21 @@ if ($warn =~ /\%$/o || $crit =~ /\%$/o) {
 		  'OK';
 }
 else {
-  $state	= $free <= $crit ? 'CRITICAL' :
-		  $free <= $warn ? 'WARNING'  :
+  $state	= $used <= $crit ? 'CRITICAL' :
+		  $used <= $warn ? 'WARNING'  :
 		  'OK';
 }
 
-if ($free >= 100) {$free = commify(int($free))}
-if ($size >= 100) {$size = commify(int($size))}
+# add perf data and nice output
+my $used_warning = sprintf("%0.2f", ($resp->{$devSize} / $unit_sz) * $warn / 100);
+my $used_critical = sprintf("%0.2f", ($resp->{$devSize} / $unit_sz) * $crit / 100);
 
-print	"SNMP $state - ",
-	"$resp->{$devDesc} at ${perc}% with $free of $size $unit_desc free\n";
+# if ($used >= 100) {$used = commify(int($used))}
+# if ($used >= 100) {$used = commify(int($used))}
+
+print	"Disk $state: ",
+	"$resp->{$devDesc} - Size: $size $unit_desc / Used: $used $unit_desc (${perc}% used)\n",
+	"|Disk-$resp->{$devDesc}=$used$unit_desc;$used_warning;$used_critical;0;$size ";
 
 exit $ERRORS{$state};
 
