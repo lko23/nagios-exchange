@@ -21,6 +21,9 @@ host=
 port=
 service=
 
+# Print User ID
+#id > /tmp/usr-id
+
 while getopts H:p:s: o
 do
 	case $o in
@@ -45,10 +48,11 @@ if [ x$host = x -o x$port = x -o x$service = x ]; then
 	exit ${STATE_UNKNOWN}
 fi
 
-#execute as sudo, needs SElinux context 'nagios_unconfined_plugin_exec_t'
-result=`/bin/sudo /usr/bin/nmap -sU -p $port -P0 $host`
+# execute as sudo, needs SElinux context 'nagios_unconfined_plugin_exec_t'
+# Replace Charset by any Char
+result=`sudo nmap -sU -p $port -P0 $host`
 
-f_result=`echo $result | egrep -o "${port}/udp [a-zA-Z0-9_-\| ]+Nmap done"`
+f_result=`echo $result | egrep -o "${port}/udp.*Nmap done"`
 p_result=`echo $f_result | awk '{print $1" "$2" "$3}'`
 
 if [ `echo $f_result | egrep -c 'open'` -gt 0 ]; then
